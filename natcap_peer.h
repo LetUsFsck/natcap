@@ -21,6 +21,7 @@
 #ifndef _NATCAP_PEER_H_
 #define _NATCAP_PEER_H_
 
-
+int natcap_peer_init(void);
+void natcap_peer_exit(void);
 
 #endif /* _NATCAP_PEER_H_ */

@@ -54,6 +54,7 @@
 #include "natcap_server.h"
 #include "natcap_forward.h"
 #include "natcap_knock.h"
+#include "natcap_peer.h"
 
 static int natcap_major = 0;
 static int natcap_minor = 0;
@@ -596,6 +597,8 @@ static int natcap_mode_init(void)
 		case KNOCK_MODE:
 			ret = natcap_knock_init();
 			break;
+		case PEER_MODE:
+			ret = natcap_peer_init();
 		default:
 			break;
 	}
@@ -621,6 +624,8 @@ static void natcap_mode_exit(void)
 		case KNOCK_MODE:
 			natcap_knock_exit();
 			break;
+		case PEER_MODE:
+			natcap_peer_exit();
 		default:
 			break;
 	}

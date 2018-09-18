@@ -38,6 +38,7 @@
 
 struct natcap_TCPOPT_header {
 	u8 opcode;
+#define TCPOPT_PEER 0x9A
 #define TCPOPT_NATCAP 0x99
 	u8 opsize;
 	u8 type;
@@ -59,6 +60,11 @@ struct natcap_TCPOPT_dst {
 struct natcap_TCPOPT_user {
 	u32 u_hash;
 	u8 mac_addr[ETH_ALEN];
+};
+
+struct natcap_TCPOPT_peer {
+	u8 mac_addr[ETH_ALEN];
+	u8 pad[2];
 };
 
 #define NATCAP_TCPOPT_SYN (1<<7)
@@ -89,6 +95,7 @@ struct natcap_TCPOPT {
 #define NATCAP_TCPOPT_TYPE_CONFUSION 4
 	char pad[4];
 #define NATCAP_TCPOPT_TYPE_ADD 5
+#define NATCAP_TCPOPT_TYPE_PEER 6
 };
 
 struct cone_nat_session {
@@ -214,6 +221,9 @@ static inline void tuple_copy(struct tuple *to, const struct tuple *from)
 #define IPS_NATCAP_ACK (1 << IPS_NATCAP_ACK_BIT)
 #define IPS_NATCAP_CFM_BIT 22
 #define IPS_NATCAP_CFM (1 << IPS_NATCAP_CFM_BIT)
+
+#define IPS_NATCAP_PEER_BIT 21
+#define IPS_NATCAP_PEER (1 << IPS_NATCAP_PEER_BIT)
 
 #define NATCAP_UDP_GET_TYPE(x) (0xFF & ntohs(x))
 #define NATCAP_UDP_GET_ENC(x) ((0xFF00 & ntohs(x)) >> 8)
