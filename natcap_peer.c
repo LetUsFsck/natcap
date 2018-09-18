@@ -109,7 +109,7 @@ static unsigned int natcap_peer_post_out_hook(void *priv,
 	struct net *net = &init_net;
 	struct natcap_TCPOPT *tcpopt;
 	int offset, header_len;
-	int size = ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_peer), sizeof(unsigned int));
+	int size;
 
 	//if (disabled)
 	//	return NF_ACCEPT;
@@ -130,6 +130,7 @@ static unsigned int natcap_peer_post_out_hook(void *priv,
 
 	NATCAP_INFO("(PPO)" DEBUG_ICMP_FMT ": ping out\n", DEBUG_ICMP_ARG(iph,l4));
 
+	size = ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_peer), sizeof(unsigned int));
 	offset = iph->ihl * 4 + sizeof(struct tcphdr) + size - skb->len;
 	header_len = offset < 0 ? 0 : offset;
 	skb2 = skb_copy_expand(skb, skb_headroom(skb), header_len, GFP_ATOMIC);
@@ -162,7 +163,7 @@ static unsigned int natcap_peer_post_out_hook(void *priv,
 	tcpopt->header.opsize = size;
 	tcpopt->header.encryption = 0;
 
-	peer_init_port(1);
+	peer_init_port(0);
 
 	TCPH(l4)->source = peer_client_port;
 	TCPH(l4)->dest = peer_server_port;
@@ -197,18 +198,14 @@ static unsigned int natcap_peer_post_out_hook(void *priv,
 
 	ct = nf_ct_get(skb2, &ctinfo);
 	if (NULL == ct) {
-		NATCAP_INFO("(PPO)" DEBUG_TCP_FMT ": ping out ct=%p\n", DEBUG_TCP_ARG(iph,l4), ct);
-		goto out2;
 		consume_skb(skb2);
 		goto out;
 	}
 
-	NATCAP_INFO("(PPO)" DEBUG_TCP_FMT ": ping out ct=%p\n", DEBUG_TCP_ARG(iph,l4), ct);
 	if (!(IPS_NATCAP_PEER & ct->status) && !test_and_set_bit(IPS_NATCAP_PEER_BIT, &ct->status)) {
 		NATCAP_INFO("(PPO)" DEBUG_TCP_FMT ": ping out\n", DEBUG_TCP_ARG(iph,l4));
 	}
 
-out2:
 	/* XXX I just confirm it first  */
 	ret = nf_conntrack_confirm(skb2);
 	if (ret != NF_ACCEPT) {
