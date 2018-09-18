@@ -243,6 +243,10 @@ int natcap_peer_init(void)
 
 	need_conntrack();
 
+	if (mode == PEER_MODE) {
+		default_mac_addr_init();
+	}
+
 	ret = nf_register_hooks(peer_hooks, ARRAY_SIZE(peer_hooks));
 	return ret;
 }
