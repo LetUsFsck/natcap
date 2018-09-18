@@ -41,6 +41,7 @@
 #include <net/netfilter/nf_conntrack_acct.h>
 #include "natcap_common.h"
 #include "natcap_peer.h"
+#include "natcap_client.h"
 
 /*XXX: 240.229.229.242
  * code: p    e    e    r
@@ -162,6 +163,8 @@ static unsigned int natcap_peer_post_out_hook(void *priv,
 	tcpopt->header.opcode = TCPOPT_PEER;
 	tcpopt->header.opsize = size;
 	tcpopt->header.encryption = 0;
+	tcpopt->peer.data.ip = iph->saddr;
+	memcpy(tcpopt->peer.data.mac_addr, default_mac_addr, ETH_ALEN);
 
 	peer_init_port(0);
 

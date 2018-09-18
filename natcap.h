@@ -63,8 +63,8 @@ struct natcap_TCPOPT_user {
 };
 
 struct natcap_TCPOPT_peer {
+	u32 ip;
 	u8 mac_addr[ETH_ALEN];
-	u8 pad[2];
 };
 
 #define NATCAP_TCPOPT_SYN (1<<7)
@@ -91,11 +91,14 @@ struct natcap_TCPOPT {
 #define NATCAP_TCPOPT_TYPE_USER 3
 			struct natcap_TCPOPT_user data;
 		} user;
+		struct {
+#define NATCAP_TCPOPT_TYPE_PEER 6
+			struct natcap_TCPOPT_peer data;
+		} peer;
 	};
 #define NATCAP_TCPOPT_TYPE_CONFUSION 4
 	char pad[4];
 #define NATCAP_TCPOPT_TYPE_ADD 5
-#define NATCAP_TCPOPT_TYPE_PEER 6
 };
 
 struct cone_nat_session {
