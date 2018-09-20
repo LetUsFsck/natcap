@@ -51,9 +51,12 @@
 __be32 peer_icmp_dst = htonl((240<<24)|(229<<16)|(229<<8)|(242<<0));
 
 //193.112.28.48
-__be32 peer_server_ip = htonl((193<<24)|(112<<16)|(28<<8)|(48<<0));
+//__be32 peer_server_ip = htonl((193<<24)|(112<<16)|(28<<8)|(48<<0));
 __be16 peer_server_port = 0;
 __be16 peer_client_port = 0;
+
+#define MAX_PEER_SERVER 8
+struct peer_server_node peer_server[MAX_PEER_SERVER];
 
 static inline void peer_init_port(int x)
 {
@@ -64,6 +67,109 @@ static inline void peer_init_port(int x)
 		peer_client_port = htons(1024 + prandom_u32() % (65535 - 1024 + 1));
 	}
 }
+
+#if 0
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
+static unsigned natcap_peer_pre_ct_hook(unsigned int hooknum,
+		struct sk_buff *skb,
+		const struct net_device *in,
+		const struct net_device *out,
+		int (*okfn)(struct sk_buff *))
+{
+	u_int8_t pf = PF_INET;
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
+static unsigned int natcap_peer_pre_ct_in_hook(const struct nf_hook_ops *ops,
+		struct sk_buff *skb,
+		const struct net_device *in,
+		const struct net_device *out,
+		int (*okfn)(struct sk_buff *))
+{
+	u_int8_t pf = ops->pf;
+	unsigned int hooknum = ops->hooknum;
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
+static unsigned int natcap_peer_pre_ct_in_hook(const struct nf_hook_ops *ops,
+		struct sk_buff *skb,
+		const struct nf_hook_state *state)
+{
+	u_int8_t pf = state->pf;
+	unsigned int hooknum = state->hook;
+	const struct net_device *in = state->in;
+	const struct net_device *out = state->out;
+#else
+static unsigned int natcap_peer_pre_ct_in_hook(void *priv,
+		struct sk_buff *skb,
+		const struct nf_hook_state *state)
+{
+	u_int8_t pf = state->pf;
+	unsigned int hooknum = state->hook;
+	const struct net_device *in = state->in;
+	const struct net_device *out = state->out;
+#endif
+	int ret = 0;
+	enum ip_conntrack_info ctinfo;
+	struct nf_conn *ct;
+	struct sk_buff *skb2;
+	struct iphdr *iph;
+	void *l4;
+	struct net *net = &init_net;
+	struct natcap_TCPOPT *tcpopt;
+	int offset, header_len;
+	int size;
+
+	//if (disabled)
+	//	return NF_ACCEPT;
+
+	if (in)
+		net = dev_net(in);
+	else if (out)
+		net = dev_net(out);
+
+	iph = ip_hdr(skb);
+	if (iph->protocol != IPPROTO_TCP) {
+		return NF_ACCEPT;
+	}
+	l4 = (void *)iph + iph->ihl * 4;
+
+	ct = nf_ct_get(skb, &ctinfo);
+	if (NULL == ct) {
+		return NF_ACCEPT;
+	}
+	if ((IPS_NATCAP_BYPASS & ct->status)) {
+		return NF_ACCEPT;
+	}
+
+	if (CTINFO2DIR(ctinfo) == IP_CT_DIR_REPLY) {
+		if (!(IPS_NATCAP_PEER & ct->status)) {
+			return NF_ACCEPT;
+		}
+
+		NATCAP_DEBUG("(PPCI)" DEBUG_TCP_FMT ": pong in\n", DEBUG_TCP_ARG(iph,l4));
+
+		if (!TCPH(l4)->syn || !TCPH(l4)->ack) {
+			NATCAP_DEBUG("(CD)" DEBUG_TCP_FMT ": pong in but not synack, bypass\n", DEBUG_TCP_ARG(iph,l4));
+			return NF_ACCEPT;
+		}
+
+		/* XXX I just confirm it first  */
+		ret = nf_conntrack_confirm(skb);
+		if (ret != NF_ACCEPT) {
+			return ret;
+		}
+
+		consume_skb(skb);
+		return NF_STOLEN;
+	} else {
+		if (!(IPS_NATCAP_PEER & ct->status)) {
+			if (!TCPH(l4)->syn || TCPH(l4)->ack) {
+				NATCAP_DEBUG("(CD)" DEBUG_TCP_FMT ": first packet in but not syn, bypass\n", DEBUG_TCP_ARG(iph,l4));
+				return NF_ACCEPT;
+			}
+		} else {
+			//
+		}
+	}
+}
+#endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
 static unsigned natcap_peer_post_out_hook(unsigned int hooknum,
@@ -111,6 +217,7 @@ static unsigned int natcap_peer_post_out_hook(void *priv,
 	struct natcap_TCPOPT *tcpopt;
 	int offset, header_len;
 	int size;
+	__be32 peer_server_ip;
 
 	//if (disabled)
 	//	return NF_ACCEPT;
@@ -124,12 +231,18 @@ static unsigned int natcap_peer_post_out_hook(void *priv,
 	if (iph->protocol != IPPROTO_ICMP) {
 		return NF_ACCEPT;
 	}
+	/*
 	if (iph->daddr != peer_icmp_dst) {
 		return NF_ACCEPT;
 	}
+	*/
+	if (iph->ttl != 1) {
+		return NF_ACCEPT;
+	}
 	l4 = (void *)iph + iph->ihl * 4;
+	peer_server_ip = iph->daddr;
 
-	NATCAP_INFO("(PPO)" DEBUG_ICMP_FMT ": ping out\n", DEBUG_ICMP_ARG(iph,l4));
+	NATCAP_DEBUG("(PPO)" DEBUG_ICMP_FMT ": ping out\n", DEBUG_ICMP_ARG(iph,l4));
 
 	size = ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_peer), sizeof(unsigned int));
 	offset = iph->ihl * 4 + sizeof(struct tcphdr) + size - skb->len;
@@ -159,6 +272,7 @@ static unsigned int natcap_peer_post_out_hook(void *priv,
 	iph->protocol = IPPROTO_TCP;
 	iph->daddr = peer_server_ip;
 	iph->tot_len = htons(skb2->len);
+	iph->ttl = 255;
 	tcpopt->header.type = NATCAP_TCPOPT_TYPE_PEER;
 	tcpopt->header.opcode = TCPOPT_PEER;
 	tcpopt->header.opsize = size;
@@ -170,7 +284,7 @@ static unsigned int natcap_peer_post_out_hook(void *priv,
 
 	TCPH(l4)->source = peer_client_port;
 	TCPH(l4)->dest = peer_server_port;
-	TCPH(l4)->seq = ntohl(jiffies);
+	TCPH(l4)->seq = htonl(jiffies);
 	TCPH(l4)->ack_seq = 0;
 	TCPH(l4)->res1 = 0;
 	TCPH(l4)->doff = (sizeof(struct tcphdr) + size) / 4;

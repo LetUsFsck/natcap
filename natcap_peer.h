@@ -21,6 +21,12 @@
 #ifndef _NATCAP_PEER_H_
 #define _NATCAP_PEER_H_
 
+struct peer_server_node {
+	__be32 ip;
+	__be16 port_map[8];
+	unsigned long last_active;
+};
+
 int natcap_peer_init(void);
 void natcap_peer_exit(void);
 
